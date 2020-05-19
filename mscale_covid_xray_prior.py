@@ -1,13 +1,11 @@
 
 #
-# '-regen':  from '-cervical', for signficant cleanup and potentially reorganize specification of processing function options
+# 'mscale_covid_xray_prior':
+#     > significant cleanup
+#     > restructuring combination of layers over scale using file storage for more precise weighting of each layer
 #
 #
 
-
-# import numpy
-import scipy
-import skimage
 
 # from bokeh.plotting import figure, show
 import matplotlib.pyplot as plt
@@ -15,35 +13,27 @@ import matplotlib.pyplot as plt
 
 
 import numpy as np
-from scipy import ndimage as ndi
-from scipy import io as scio
-from scipy import misc
-
-# from skimage import data
-from skimage.util import img_as_float
-from skimage.filters import gabor_kernel
-import skimage.io as skio
-
+import scipy
+from scipy import ndimage
+#
+# from scipy import io as scio
+# from scipy import misc
 # from scipy.misc import toimage
 # from scipy.misc import imsave, imshow
+# import scipy.io as sio
 
-import scipy.io as sio
+import skimage.io as skio
+# from skimage.util import img_as_float
+# from skimage.filters import gabor_kernel
 
 import imageio
 
 # from PIL import Image
 
 
-
-
-# import cython
-
-# from mayavi import mlab
-
-
 def img_scale_4plot_nsave(img_2scale, xsize, ysize):
 
-    trim_fac = 0.01;
+    trim_fac = 0.05;
 
     x_arr = np.reshape(img_2scale, (1, xsize*ysize))
     x_arr_sorted = np.sort(x_arr)
@@ -62,7 +52,7 @@ def img_scale_4plot_nsave(img_2scale, xsize, ysize):
 
 
 def uk_xray(out_file_dir, img_name_os, img_ext, sm_fac, order, sm_fac_l2l, sm_fac_l2l_order, prefix, roi_size_beg, roi_size_max, roi_size_incr, div_offsetx,
-                write_freq, log_sw, log_off, x_off, y_off, rescaling, roi_scaling, mean_min, mad_vpk2pk_scaling, rgb_idx, dbg_img_inter):
+                write_freq, log_sw, log_off, x_off, y_off, rescaling, roi_scaling, mean_min, mad_vpk2pk_scaling, rgb_idx, dbg_img_inter, img_trim_fac):
 
 
     dir2_img = out_file_dir + img_name_os + img_ext
@@ -70,11 +60,21 @@ def uk_xray(out_file_dir, img_name_os, img_ext, sm_fac, order, sm_fac_l2l, sm_fa
     fname_var_str = "\n reading:  " + dir2_img
     print(fname_var_str)
 
-    oc_img_raw_ttl = skio.imread(dir2_img)
+    oc_img_raw_z = skio.imread(dir2_img)
+    oc_img_raw_shape = oc_img_raw_z.shape
 
-    oc_img_raw_z = oc_img_raw_ttl[:,:,rgb_idx]
-
+    if (len(oc_img_raw_shape)== 3):
+        oc_img_raw_z = oc_img_raw_z[:,:,rgb_idx]
+        
     oc_img_raw = oc_img_raw_z.astype(float)
+
+    oc_img_shape = oc_img_raw.shape
+    oc_img_xsize = oc_img_shape[0]
+    oc_img_ysize = oc_img_shape[1]
+
+    oc_img_xsize_off = np.int(oc_img_xsize*img_trim_fac)
+    oc_img_ysize_off = np.int(oc_img_ysize*img_trim_fac)
+    oc_img_raw = oc_img_raw[oc_img_xsize_off : oc_img_xsize - oc_img_xsize_off, oc_img_ysize_off : oc_img_ysize - oc_img_ysize_off]
 
     oc_img_shape = oc_img_raw.shape
     oc_img_xsize = oc_img_shape[0]
@@ -108,18 +108,17 @@ def uk_xray(out_file_dir, img_name_os, img_ext, sm_fac, order, sm_fac_l2l, sm_fa
 
             # oc_img = oc_img_raw[:, :, juno_rgb]
             oc_img = oc_img_raw
+
             if(log_sw == 1):
                 oc_img_nz = np.add(oc_img, log_off)
                 oc_img = np.log(oc_img_nz)
 
 
             img_dtype = oc_img.dtype
-            img_min = oc_img.min()
-            img_max = oc_img.max()
             img_shape = oc_img.shape
 
-            oc_img_arr = np.reshape(oc_img, (1,np.product(oc_img.shape)))
-            oc_img_fl = oc_img_arr.flatten()
+            # oc_img_arr = np.reshape(oc_img, (1,np.product(oc_img.shape)))
+            # oc_img_fl = oc_img_arr.flatten()
 
             oc_img_acc_mad_rel2_pk2pk_isum = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
             oc_img_mad_isum = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
@@ -130,7 +129,6 @@ def uk_xray(out_file_dir, img_name_os, img_ext, sm_fac, order, sm_fac_l2l, sm_fa
             oc_img_acc_mad_inv_sc_isum = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
             oc_img_mad_inv_sc_isum = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
             oc_img_var_acc = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
-            oc_img_sc = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
             oc_img_mad_mean = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
             oc_img_mad_var = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
             oc_img_mad_mean_roi = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
@@ -382,9 +380,10 @@ def uk_xray(out_file_dir, img_name_os, img_ext, sm_fac, order, sm_fac_l2l, sm_fa
                     # oc_img_madx = np.clip(oc_img_mad_isum, oc_img_mad_isum.max()/1000.0, oc_img_mad_isum.max())
                     # oc_img_acc_pk2pk_std_sz = np.divide(oc_img_acc_mad_rel2_pk2pk_isum, oc_img_madx)
                     oc_img_enh_pk2pk_std_sz = img_scale_4plot_nsave(oc_img_acc_mad_rel2_pk2pk, oc_img_xsize, oc_img_ysize)
-                    img_fname_strx = out_file_dir + prefix + "mad_mean_" + img_name_os +  "_roi" + str(roi_size) + "_gvar" + str(gauss_var) + "_rgb" + str(juno_rgb) + ".jpg"
+                    img_fname_strx = out_file_dir + prefix + "mad_mean_" + img_name_os +  "_roi" + str(roi_size) + "_gvar" + str(gauss_var) + "_rgb" + str(juno_rgb) + ".png"
                     # imsave(img_fname_strx, oc_img_enh_pk2pk_std_sz)
-                    imageio.imwrite(img_fname_strx, oc_img_enh_pk2pk_std_sz)
+                    # imageio.imwrite(img_fname_strx, oc_img_enh_pk2pk_std_sz)
+                    skio.imsave(img_fname_strx, oc_img_enh_pk2pk_std_sz)
 
                     # oc_img_madx_inv = np.clip(oc_img_mad_inv_isum, oc_img_mad_inv_isum.max()/1000.0, oc_img_mad_inv_isum.max())
                     # oc_img_acc_pk2pk_std_sz = np.divide(oc_img_acc_pk2pk_rel2_mad_isum, oc_img_madx_inv)
@@ -397,19 +396,20 @@ def uk_xray(out_file_dir, img_name_os, img_ext, sm_fac, order, sm_fac_l2l, sm_fa
                     # oc_img_enh_pk2pk_std_sz = img_scale_4plot_nsave(oc_img_diff_pyr, oc_img_xsize, oc_img_ysize)
                     # img_fname_strx = out_file_dir + prefix + "gauss_pyr_" + img_name_os +  "_roi" + str(roi_size) + "_gvar" + str(gauss_var) + "_rgb" + str(juno_rgb) + ".jpg"
                     # imageio.imwrite(img_fname_strx, oc_img_enh_pk2pk_std_sz)
+                    # imageio.imwrite(img_fname_strx, oc_img_enh_pk2pk_std_sz)
 
 
                     oc_img_mad_scx = np.clip(oc_img_mad_sc_isum, oc_img_mad_sc_isum.max()/1000.0, oc_img_mad_sc_isum.max())
                     oc_img_acc_pk2pk_std_sz = np.divide(oc_img_acc_mad_sc_isum, oc_img_mad_scx)
                     oc_img_enh_pk2pk_std_sz = img_scale_4plot_nsave(oc_img_acc_pk2pk_std_sz, oc_img_xsize, oc_img_ysize)
-                    img_fname_strx = out_file_dir + prefix + "mad_sc_roi_" + img_name_os +  "_roi" + str(roi_size) + "_gvar" + str(gauss_var)  + "_rgb" + str(juno_rgb) + ".jpg"
-                    imageio.imwrite(img_fname_strx, oc_img_enh_pk2pk_std_sz)
+                    img_fname_strx = out_file_dir + prefix + "mad_sc_roi_" + img_name_os +  "_roi" + str(roi_size) + "_gvar" + str(gauss_var)  + "_rgb" + str(juno_rgb) + ".png"
+                    skio.imsave(img_fname_strx, oc_img_enh_pk2pk_std_sz)
 
                     oc_img_mad_inv_scx = np.clip(oc_img_mad_inv_sc_isum, oc_img_mad_inv_sc_isum.max()/1000.0, oc_img_mad_inv_sc_isum.max())
                     oc_img_acc_pk2pk_std_sz = np.divide(oc_img_acc_mad_inv_sc_isum, oc_img_mad_inv_scx)
                     oc_img_enh_pk2pk_std_sz = img_scale_4plot_nsave(oc_img_acc_pk2pk_std_sz, oc_img_xsize, oc_img_ysize)
-                    img_fname_strx = out_file_dir + prefix + "mad_sc_ctr_" + img_name_os +  "_roi" + str(roi_size) + "_gvar" + str(gauss_var)  + "_rgb" + str(juno_rgb) + ".jpg"
-                    imageio.imwrite(img_fname_strx, oc_img_enh_pk2pk_std_sz)
+                    img_fname_strx = out_file_dir + prefix + "mad_sc_ctr_" + img_name_os +  "_roi" + str(roi_size) + "_gvar" + str(gauss_var)  + "_rgb" + str(juno_rgb) + ".png"
+                    skio.imsave(img_fname_strx, oc_img_enh_pk2pk_std_sz)
 
         bleffy = 14
 
