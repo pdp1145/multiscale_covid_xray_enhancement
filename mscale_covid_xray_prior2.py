@@ -122,6 +122,8 @@ def uk_xray(out_file_dir, img_name_os, img_ext, sm_fac, order, sm_fac_l2l, sm_fa
             # oc_img_arr = np.reshape(oc_img, (1,np.product(oc_img.shape)))
             # oc_img_fl = oc_img_arr.flatten()
 
+            oc_img_acc_roi_var_scaled_sum_over_sizes = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
+            oc_img_acc_roi_var_scaled_ctrpt_sum_over_sizes = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
             oc_img_acc_mad_sc_ctrpt_sum_over_sizes = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
             oc_img_mad_sc_inv_ctrpt_sum_over_sizes = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
             oc_img_acc_mad_sc_sum_over_sizes = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
@@ -136,6 +138,7 @@ def uk_xray(out_file_dir, img_name_os, img_ext, sm_fac, order, sm_fac_l2l, sm_fa
 
             oc_img_acc_mad_sc_ctrpt_isum = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
             oc_img_mad_sc_inv_ctrpt_isum = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
+
             # oc_img_var_acc = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
             oc_img_mad_var = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
             oc_img_mad_mean_roi = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
@@ -165,6 +168,9 @@ def uk_xray(out_file_dir, img_name_os, img_ext, sm_fac, order, sm_fac_l2l, sm_fa
                 oc_img_mad_inv = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
                 oc_img_mad_sc_inv = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
                 oc_img_mad_sc_inv_ctrpt = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
+                oc_img_acc_roi_var_scaled = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
+                oc_img_acc_roi_var_scaled_ctrpt = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
+
 
                 oc_img_var = np.zeros((oc_img_xsize, oc_img_ysize), dtype='float')
 
@@ -231,7 +237,7 @@ def uk_xray(out_file_dir, img_name_os, img_ext, sm_fac, order, sm_fac_l2l, sm_fa
                         # s_mad = s_mad / (s_pk2pk_orig + 1.0)
 
                         if(mad_vpk2pk_scaling == 1):
-                            s_mad = s_mad / (s_pk2pk + 1.0)
+                            s_mad = s_mad / (s_pk2pk + div_offset)
 
                         # s_mad_rescaled = np.std(roi_pk2pk_rescaled)    # Use variance now instead of mad
 
@@ -254,42 +260,46 @@ def uk_xray(out_file_dir, img_name_os, img_ext, sm_fac, order, sm_fac_l2l, sm_fa
                         # oc_img_acc_pk2pk_rel2_mad[i:(i + roi_size), j:(j + roi_size)] = np.add(oc_img_acc_pk2pk_rel2_mad[i:(i + roi_size), j:(j + roi_size)], roi_pk2pk_rel2_mad)
                         # oc_img_mad_inv[i:(i + roi_size), j:(j + roi_size)] = np.add(oc_img_mad_inv[i:(i + roi_size), j:(j + roi_size)], scale_fac )  # roi_pk2pk_mad_rel2_pk2pk
 
+                        roi_base_scaled = roi_pk2pk_rescaled
 
+                        roi_scale_fac = s_mad
+                        roi_var_scaled = np.multiply(roi_pk2pk_rescaled, roi_scale_fac)
 
-                        # scale_fac = s_mad
-                        # roi_mad_sc = np.multiply(roi_pk2pk_rescaled, s_mad)  # Local mad w/ respect to local pk-to-pk scaling  -- Junocam upload type #2
-                        roi_mad_sc = roi_pk2pk_rescaled
-                        oc_img_acc_mad_sc[i:(i + roi_size), j:(j + roi_size)] = np.add(oc_img_acc_mad_sc[i:(i + roi_size), j:(j + roi_size)], roi_mad_sc)
+                        oc_img_acc_mad_sc[i:(i + roi_size), j:(j + roi_size)] = np.add(oc_img_acc_mad_sc[i:(i + roi_size), j:(j + roi_size)], roi_base_scaled)
                         oc_img_mad_sc_inv[i:(i + roi_size), j:(j + roi_size)] = np.add(oc_img_mad_sc_inv[i:(i + roi_size), j:(j + roi_size)], s_mad )
 
-                        oc_img_acc_mad_sc_ctrpt[i + roi_offset, j + roi_offset] = np.add(oc_img_acc_mad_sc_ctrpt[i + roi_offset, j + roi_offset], roi_mad_sc[roi_offset, roi_offset])
+                        oc_img_acc_mad_sc_ctrpt[i + roi_offset, j + roi_offset] = np.add(oc_img_acc_mad_sc_ctrpt[i + roi_offset, j + roi_offset], roi_base_scaled[roi_offset, roi_offset])
                         oc_img_mad_sc_inv_ctrpt[i + roi_offset, j + roi_offset] = np.add(oc_img_mad_sc_inv_ctrpt[i + roi_offset, j + roi_offset], s_mad )
 
-                        if(roi_size_idx == 0):
-                            oc_img_mad_mean[i + roi_offset, j + roi_offset] = s_mad    # Init running mean & variance -- variance is already initialized (== 0)
-                        else:
-                            s_mad_t = oc_img_mad_mean[i + roi_offset, j + roi_offset]
-                            s_mad_upd = s_mad_t + (s_mad - s_mad_t) / (roi_size_idx +1)
-                            oc_img_mad_mean[i + roi_offset, j + roi_offset] = s_mad_upd
-
-                            s_var_t = oc_img_mad_var[i + roi_offset, j + roi_offset]
-                            s_var_t = s_var_t + (s_mad - s_mad_t)*(s_mad - s_mad_upd)
-                            oc_img_mad_var[i + roi_offset, j + roi_offset] = s_var_t
+                        oc_img_acc_roi_var_scaled[i:(i + roi_size), j:(j + roi_size)] = np.add(oc_img_acc_roi_var_scaled[i:(i + roi_size), j:(j + roi_size)], roi_var_scaled)
+                        oc_img_acc_roi_var_scaled_ctrpt[i + roi_size, j + roi_size] = np.add(oc_img_acc_roi_var_scaled_ctrpt[i + roi_size, j + roi_size], roi_var_scaled[roi_offset, roi_offset])
 
 
-                        # Running mean & var on entire ROI:
-                        #
-                        if(roi_size_idx == 0):
-                            oc_img_mad_mean_roi[i:(i + roi_size), j:(j + roi_size)] = roi    # Init running mean & variance -- variance is already initialized (== 0)
-                        else:
-                            s_mad_t = oc_img_mad_mean_roi[i:(i + roi_size), j:(j + roi_size)]
-                            s_mad_upd = s_mad_t + (roi - s_mad_t) / (roi_size_idx +1)
-                            oc_img_mad_mean_roi[i:(i + roi_size), j:(j + roi_size)] = s_mad_upd
-
-                            s_var_t = oc_img_mad_var_roi[i:(i + roi_size), j:(j + roi_size)]
-                            # s_var_t = s_var_t + (s_mad - s_mad_t)*(s_mad - s_mad_upd)
-                            s_var_t = np.multiply((s_mad - s_mad_t), (s_mad - s_mad_upd))
-                            oc_img_mad_var_roi[i:(i + roi_size), j:(j + roi_size)] = s_var_t
+                        # if(roi_size_idx == 0):
+                        #     oc_img_mad_mean[i + roi_offset, j + roi_offset] = s_mad    # Init running mean & variance -- variance is already initialized (== 0)
+                        # else:
+                        #     s_mad_t = oc_img_mad_mean[i + roi_offset, j + roi_offset]
+                        #     s_mad_upd = s_mad_t + (s_mad - s_mad_t) / (roi_size_idx +1)
+                        #     oc_img_mad_mean[i + roi_offset, j + roi_offset] = s_mad_upd
+                        # 
+                        #     s_var_t = oc_img_mad_var[i + roi_offset, j + roi_offset]
+                        #     s_var_t = s_var_t + (s_mad - s_mad_t)*(s_mad - s_mad_upd)
+                        #     oc_img_mad_var[i + roi_offset, j + roi_offset] = s_var_t
+                        # 
+                        # 
+                        # # Running mean & var on entire ROI:
+                        # #
+                        # if(roi_size_idx == 0):
+                        #     oc_img_mad_mean_roi[i:(i + roi_size), j:(j + roi_size)] = roi    # Init running mean & variance -- variance is already initialized (== 0)
+                        # else:
+                        #     s_mad_t = oc_img_mad_mean_roi[i:(i + roi_size), j:(j + roi_size)]
+                        #     s_mad_upd = s_mad_t + (roi - s_mad_t) / (roi_size_idx +1)
+                        #     oc_img_mad_mean_roi[i:(i + roi_size), j:(j + roi_size)] = s_mad_upd
+                        # 
+                        #     s_var_t = oc_img_mad_var_roi[i:(i + roi_size), j:(j + roi_size)]
+                        #     # s_var_t = s_var_t + (s_mad - s_mad_t)*(s_mad - s_mad_upd)
+                        #     s_var_t = np.multiply((s_mad - s_mad_t), (s_mad - s_mad_upd))
+                        #     oc_img_mad_var_roi[i:(i + roi_size), j:(j + roi_size)] = s_var_t
 
                 # scale_fac = 1.0 / (s_mad + div_offset)
                         # roi_mad_inv_sc = np.multiply(roi_pk2pk_rescaled, scale_fac)  # Local mad w/ respect to local pk-to-pk scaling  -- Junocam upload type #2
@@ -308,6 +318,8 @@ def uk_xray(out_file_dir, img_name_os, img_ext, sm_fac, order, sm_fac_l2l, sm_fa
                 oc_img_acc_mad_sc_sum_over_sizes = np.add(oc_img_acc_mad_sc_sum_over_sizes, oc_img_acc_mad_sc)
                 oc_img_mad_sc_inv_ctrpt_sum_over_sizes = np.add(oc_img_mad_sc_inv_ctrpt_sum_over_sizes, oc_img_mad_sc_inv_ctrpt)
                 oc_img_mad_sc_inv_sum_over_sizes = np.add(oc_img_mad_sc_inv_sum_over_sizes, oc_img_mad_sc_inv)
+                oc_img_acc_roi_var_scaled_sum_over_sizes = np.add(oc_img_acc_roi_var_scaled_sum_over_sizes, oc_img_acc_roi_var_scaled)
+                oc_img_acc_roi_var_scaled_ctrpt_sum_over_sizes = np.add(oc_img_acc_roi_var_scaled_ctrpt_sum_over_sizes, oc_img_acc_roi_var_scaled_ctrpt)
 
                 write_ct = write_ct +1
                 if (write_ct == write_freq):
@@ -326,6 +338,17 @@ def uk_xray(out_file_dir, img_name_os, img_ext, sm_fac, order, sm_fac_l2l, sm_fa
                     )
                     fig.show()
 
+                    fig = px.imshow(oc_img_acc_roi_var_scaled_ctrpt, color_continuous_scale='gray')
+                    fig.update_layout(
+                        title="Center Points After Variance Scaling:"
+                    )
+                    fig.show()
+                    fig = px.imshow(oc_img_acc_roi_var_scaled_ctrpt_sum_over_sizes, color_continuous_scale='gray')
+                    fig.update_layout(
+                        title="Center Points After Variance Scaling: Sum Over Sizes"
+                    )
+                    fig.show()
+
                     # oc_img_fl = oc_img_acc_mad_sc_ctrpt.flatten()
                     # fig = go.Figure(data=[go.Histogram(x=oc_img_fl)])
                     # fig.show()
@@ -341,6 +364,17 @@ def uk_xray(out_file_dir, img_name_os, img_ext, sm_fac, order, sm_fac_l2l, sm_fa
                     fig = px.imshow(oc_img_mad_sc_inv_ctrpt_sum_over_sizes, color_continuous_scale='gray')
                     fig.update_layout(
                         title="Center Points MAD After Rescaling: Sum Over Sizes"
+                    )
+                    fig.show()
+
+                    fig = px.imshow(oc_img_acc_roi_var_scaled, color_continuous_scale='gray')
+                    fig.update_layout(
+                        title="ROIs After Variance Scaling:"
+                    )
+                    fig.show()
+                    fig = px.imshow(oc_img_acc_roi_var_scaled_sum_over_sizes, color_continuous_scale='gray')
+                    fig.update_layout(
+                        title="ROIs After Variance Scaling: Sum Over Sizes"
                     )
                     fig.show()
 
@@ -392,6 +426,23 @@ def uk_xray(out_file_dir, img_name_os, img_ext, sm_fac, order, sm_fac_l2l, sm_fa
                     fig = px.imshow(oc_img_mad_sc_inv_sum_over_sizes, color_continuous_scale='gray')
                     fig.update_layout(
                         title="ROI MAD After Rescaling: Sum Over Sizes"
+                    )
+                    fig.show()
+
+
+                    # Variance scaled ROI's / total ariance:
+                    #
+                    oc_img_t = np.divide(oc_img_acc_roi_var_scaled_ctrpt_sum_over_sizes, (oc_img_mad_sc_inv_ctrpt_sum_over_sizes + 10.0))
+                    fig = px.imshow(oc_img_t, color_continuous_scale='gray')
+                    fig.update_layout(
+                        title="Variance Scaled ROI Center Points / Total Variance at Center Points"
+                    )
+
+                    oc_img_t = np.divide(oc_img_acc_roi_var_scaled_sum_over_sizes, (oc_img_mad_sc_inv_sum_over_sizes + 0.001))
+                    fig.show()
+                    fig = px.imshow(oc_img_t, color_continuous_scale='gray')
+                    fig.update_layout(
+                        title="Variance Scaled ROIs / Total Variance"
                     )
                     fig.show()
 
